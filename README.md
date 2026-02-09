@@ -1,6 +1,6 @@
 # geobedts
 
-High-performance offline geocoding library for TypeScript/Node.js. Port of the Go [geobed](https://github.com/andreiashu/geobed) library.
+High-performance offline geocoding library for TypeScript/Node.js.
 
 Provides forward geocoding (city name to coordinates) and reverse geocoding (coordinates to nearest city) using [Geonames](https://www.geonames.org/) data with ~165,000 cities worldwide.
 

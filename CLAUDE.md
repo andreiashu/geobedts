@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-geobedts is a TypeScript port of the Go [geobed](https://github.com/andreiashu/geobed) offline geocoding library. It provides forward geocoding (city name to coordinates) and reverse geocoding (coordinates to nearest city) using Geonames data.
+geobedts is an offline geocoding library for TypeScript/Node.js. It provides forward geocoding (city name to coordinates) and reverse geocoding (coordinates to nearest city) using Geonames data.
 
 ## Build & Test
 
@@ -39,7 +39,7 @@ npm run generate-cache # Regenerate .msgpack cache files from raw data
 - Tests use Vitest with 60s timeouts (data loading is slow)
 - All imports use `.js` extension (required for Node16 ESM)
 
-## Behavioral Requirements (must match Go version)
+## Behavioral Requirements
 
 - Scoring weights: 7 exact city, 5 region abbrev/alt exact, 4 country/state, 3 alt case-insensitive, 2 substring, 1 case-insensitive
 - Population tiebreaker when scores are equal
