@@ -1,0 +1,37 @@
+{
+  "name": "geobedts",
+  "version": "1.0.0",
+  "description": "High-performance offline geocoding library for TypeScript - port of Go geobed",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "generate-cache": "tsx src/generate-cache.ts",
+    "bench": "vitest bench"
+  },
+  "license": "BSD-3-Clause",
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0",
+    "tsx": "^4.19.0",
+    "@types/node": "^22.0.0",
+    "@types/yauzl": "^2.10.0",
+    "unbzip2-stream": "^1.4.3"
+  },
+  "dependencies": {
+    "fastest-levenshtein": "^1.0.16",
+    "yauzl": "^3.2.0",
+    "@msgpack/msgpack": "^3.0.0",
+    "seek-bzip": "^2.0.0",
+    "fflate": "^0.8.0"
+  }
+}

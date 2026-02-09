@@ -1,0 +1,6 @@
+node_modules/
+dist/
+*.dmp
+.DS_Store
+geobed-data
+geobed-cache/
