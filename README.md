@@ -7,7 +7,7 @@ Provides forward geocoding (city name to coordinates) and reverse geocoding (coo
 ## Installation
 
 ```bash
-npm install geobedts
+npm install github:andreiashu/geobedts
 ```
 
 ## Quick Start
