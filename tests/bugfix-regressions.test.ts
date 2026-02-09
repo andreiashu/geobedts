@@ -179,13 +179,19 @@ describe('Bug fix regressions', () => {
     });
 
     it('edge neighbors are valid for multiple global locations', () => {
-      // Test locations well within S2 face interiors (not near face boundaries)
       const locations = [
         { name: 'Berlin', lat: 52.52, lng: 13.405 },
         { name: 'NYC', lat: 40.7128, lng: -74.006 },
         { name: 'Moscow', lat: 55.7558, lng: 37.6173 },
         { name: 'Denver', lat: 39.7392, lng: -104.9903 },
         { name: 'Austin', lat: 30.2672, lng: -97.7431 },
+        // Face-boundary locations (previously broken with custom S2 impl)
+        { name: 'Cairo', lat: 30.0444, lng: 31.2357 },
+        { name: 'Mumbai', lat: 19.076, lng: 72.8777 },
+        { name: 'Sydney', lat: -33.8688, lng: 151.2093 },
+        { name: 'Rome', lat: 41.9028, lng: 12.4964 },
+        { name: 'Lagos', lat: 6.5244, lng: 3.3792 },
+        { name: 'Nairobi', lat: -1.2921, lng: 36.8219 },
       ];
 
       for (const loc of locations) {
@@ -204,27 +210,6 @@ describe('Bug fix regressions', () => {
           expect(face).toBeLessThanOrEqual(5);
         }
       }
-    });
-
-    it('known limitation: face-boundary neighbors may be invalid', () => {
-      // Locations near S2 face boundaries (e.g. Sydney) can produce
-      // neighbors with invalid face IDs due to cellIDFromFaceIJWrap.
-      // This is a known limitation — those invalid neighbors simply
-      // don't match any entries in the cell index, so reverse geocode
-      // still works but searches fewer cells than ideal.
-      const ll = latLngFromDegrees(-33.8688, 151.2093); // Sydney
-      const cell = cellIDParentAtLevel(cellIDFromLatLng(ll), 10);
-      const neighbors = cellIDEdgeNeighbors(cell);
-
-      // At least one neighbor should be valid
-      const validCount = neighbors.filter(n => {
-        const face = Number(n >> 61n);
-        return face >= 0 && face <= 5;
-      }).length;
-      expect(validCount).toBeGreaterThanOrEqual(1);
-
-      // Sydney reverse geocode still works despite boundary issue
-      // (verified via the actual GeoBed instance in other tests)
     });
 
     it('nearby city is reachable via cell neighbors', () => {
