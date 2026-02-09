@@ -104,11 +104,6 @@ export interface AdminDivision {
   name: string;
 }
 
-export interface SearchRange {
-  from: number;
-  to: number;
-}
-
 export const S2_CELL_LEVEL = 10;
 export const MAX_GEOCODE_INPUT_LEN = 256;
 export const MIN_CITY_COUNT = 140000;

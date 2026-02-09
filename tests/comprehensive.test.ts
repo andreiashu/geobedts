@@ -13,49 +13,65 @@ describe('GeoBed Comprehensive Tests', () => {
     it('whitespace only - spaces', () => { expect(g.geocode('   ').city).toBe(''); });
     it('whitespace only - tabs', () => { expect(g.geocode('\t\t').city).toBe(''); });
     it('whitespace only - mixed', () => { expect(g.geocode(' \t \n ').city).toBe(''); });
-    it('numeric string', () => { g.geocode('12345'); }); // just no crash
-    it('long number', () => { g.geocode('1234567890'); });
-    it('special characters', () => { g.geocode('!@#$%^&*()'); });
-    it('very long string', () => { g.geocode('a'.repeat(1000)); });
-    it('string with newlines', () => { g.geocode('New\nYork'); });
-    it('single character', () => { g.geocode('A'); });
-    it('two characters', () => { g.geocode('NY'); });
+    it('numeric string', () => { expect(g.geocode('12345').city).toBe(''); });
+    it('long number', () => { expect(g.geocode('1234567890').city).toBe(''); });
+    it('special characters', () => { expect(g.geocode('!@#$%^&*()').city).toBe(''); });
+    it('very long string', () => {
+      const result = g.geocode('a'.repeat(1000));
+      // Should truncate at 256 codepoints and not crash
+      expect(result).toBeDefined();
+    });
+    it('string with newlines', () => {
+      const result = g.geocode('New\nYork');
+      // Newlines in input — may or may not match
+      expect(result).toBeDefined();
+    });
+    it('single character', () => {
+      const result = g.geocode('A');
+      // Single char may match something or return empty
+      expect(result).toBeDefined();
+    });
+    it('two characters', () => {
+      const result = g.geocode('NY');
+      // "NY" is a state code — may or may not resolve to a city
+      expect(result).toBeDefined();
+    });
   });
 
   describe('TestGeocodeUnicodeInternational', () => {
     const tests = [
-      { name: 'Munich', input: 'Munich', wantCountry: 'DE' },
-      { name: 'Sao Paulo', input: 'Sao Paulo', wantCountry: 'BR' },
-      { name: 'Beijing', input: 'Beijing', wantCountry: 'CN' },
-      { name: 'Moscow', input: 'Moscow', wantCountry: 'RU' },
-      { name: 'Vienna', input: 'Vienna', wantCountry: 'AT' },
-      { name: 'Prague', input: 'Prague', wantCountry: 'CZ' },
+      { name: 'Munich', input: 'Munich', wantCity: 'Munich', wantCountry: 'DE' },
+      { name: 'Sao Paulo', input: 'Sao Paulo', wantCity: 'São Paulo', wantCountry: 'BR' },
+      { name: 'Beijing', input: 'Beijing', wantCity: 'Beijing', wantCountry: 'CN' },
+      { name: 'Moscow', input: 'Moscow', wantCity: 'Moscow', wantCountry: 'RU' },
+      { name: 'Vienna', input: 'Vienna', wantCity: 'Vienna', wantCountry: 'AT' },
+      { name: 'Prague', input: 'Prague', wantCity: 'Prague', wantCountry: 'CZ' },
     ];
 
     for (const tt of tests) {
       it(tt.name, () => {
         const result = g.geocode(tt.input);
-        expect(result.city).not.toBe('');
-        if (tt.wantCountry) {
-          expect(GeoBed.cityCountry(result)).toBe(tt.wantCountry);
-        }
+        expect(result.city).toBe(tt.wantCity);
+        expect(GeoBed.cityCountry(result)).toBe(tt.wantCountry);
+        expect(result.population).toBeGreaterThan(0);
       });
     }
   });
 
   describe('TestGeocodeJapaneseChineseNames', () => {
     const tests = [
-      { name: 'Tokyo', input: 'Tokyo', wantCountry: 'JP' },
-      { name: 'Osaka', input: 'Osaka', wantCountry: 'JP' },
-      { name: 'Shanghai', input: 'Shanghai', wantCountry: 'CN' },
-      { name: 'Seoul', input: 'Seoul', wantCountry: 'KR' },
+      { name: 'Tokyo', input: 'Tokyo', wantCity: 'Tokyo', wantCountry: 'JP' },
+      { name: 'Osaka', input: 'Osaka', wantCity: 'Osaka', wantCountry: 'JP' },
+      { name: 'Shanghai', input: 'Shanghai', wantCity: 'Shanghai', wantCountry: 'CN' },
+      { name: 'Seoul', input: 'Seoul', wantCity: 'Seoul', wantCountry: 'KR' },
     ];
 
     for (const tt of tests) {
       it(tt.name, () => {
         const result = g.geocode(tt.input);
-        expect(result.city).not.toBe('');
+        expect(result.city).toBe(tt.wantCity);
         expect(GeoBed.cityCountry(result)).toBe(tt.wantCountry);
+        expect(result.population).toBeGreaterThan(0);
       });
     }
   });
@@ -78,8 +94,9 @@ describe('GeoBed Comprehensive Tests', () => {
       it(tt.name, () => {
         const result = g.geocode(tt.input);
         expect(result.city).not.toBe('');
-        if (tt.wantCountry) expect(GeoBed.cityCountry(result)).toBe(tt.wantCountry);
+        expect(GeoBed.cityCountry(result)).toBe(tt.wantCountry);
         if (tt.wantRegion) expect(GeoBed.cityRegion(result)).toBe(tt.wantRegion);
+        expect(result.population).toBeGreaterThan(0);
       });
     }
   });
@@ -162,26 +179,58 @@ describe('GeoBed Comprehensive Tests', () => {
   });
 
   describe('TestReverseGeocodeEdgeCases', () => {
-    const tests = [
-      { name: 'origin (0,0)', lat: 0.0, lng: 0.0 },
-      { name: 'north pole', lat: 90.0, lng: 0.0 },
-      { name: 'south pole', lat: -90.0, lng: 0.0 },
-      { name: 'date line positive', lat: 0.0, lng: 180.0 },
-      { name: 'date line negative', lat: 0.0, lng: -180.0 },
-      { name: 'middle of Pacific', lat: 0.0, lng: -160.0 },
-      { name: 'middle of Atlantic', lat: 30.0, lng: -40.0 },
-      { name: 'extreme coordinates', lat: -90.0, lng: 180.0 },
-      { name: 'very precise - Austin TX', lat: 30.267153, lng: -97.743057 },
-    ];
+    it('origin (0,0) → empty or near coastal city', () => {
+      const result = g.reverseGeocode(0, 0);
+      // (0,0) is in the Gulf of Guinea — likely empty
+      if (result.city !== '') {
+        expect(result.population).toBeGreaterThanOrEqual(0);
+      }
+    });
 
-    for (const tt of tests) {
-      it(tt.name, () => {
-        const result = g.reverseGeocode(tt.lat, tt.lng);
-        void result.city;
-        void GeoBed.cityCountry(result);
-        void GeoBed.cityRegion(result);
-      });
-    }
+    it('north pole (90,0) → empty', () => {
+      const result = g.reverseGeocode(90, 0);
+      expect(result.city).toBe('');
+    });
+
+    it('south pole (-90,0) → empty', () => {
+      const result = g.reverseGeocode(-90, 0);
+      expect(result.city).toBe('');
+    });
+
+    it('date line positive (0,180) → empty or nearest', () => {
+      const result = g.reverseGeocode(0, 180);
+      if (result.city !== '') {
+        expect(result.population).toBeGreaterThanOrEqual(0);
+      }
+    });
+
+    it('date line negative (0,-180) → empty or nearest', () => {
+      const result = g.reverseGeocode(0, -180);
+      if (result.city !== '') {
+        expect(result.population).toBeGreaterThanOrEqual(0);
+      }
+    });
+
+    it('middle of Pacific (0,-160) → empty', () => {
+      const result = g.reverseGeocode(0, -160);
+      expect(result.city).toBe('');
+    });
+
+    it('middle of Atlantic (30,-40) → empty', () => {
+      const result = g.reverseGeocode(30, -40);
+      expect(result.city).toBe('');
+    });
+
+    it('extreme coordinates (-90,180) → empty', () => {
+      const result = g.reverseGeocode(-90, 180);
+      expect(result.city).toBe('');
+    });
+
+    it('very precise Austin TX → Austin, US', () => {
+      const result = g.reverseGeocode(30.267153, -97.743057);
+      expect(result.city).toBe('Austin');
+      expect(GeoBed.cityCountry(result)).toBe('US');
+    });
   });
 
   describe('TestReverseGeocodeKnownLocations', () => {
@@ -252,6 +301,7 @@ describe('GeoBed Comprehensive Tests', () => {
         const result = g.geocode(tt.input);
         expect(result.city).not.toBe('');
         expect(GeoBed.cityCountry(result)).toBe(tt.wantCountry);
+        expect(result.population).toBeGreaterThan(0);
       });
     }
   });
@@ -291,24 +341,68 @@ describe('GeoBed Comprehensive Tests', () => {
   });
 
   describe('TestSpecialInputFormats', () => {
-    const tests = [
-      { name: 'leading spaces', input: '  Austin' },
-      { name: 'trailing spaces', input: 'Austin  ' },
-      { name: 'multiple spaces', input: 'New  York' },
-      { name: 'tabs between words', input: 'New\tYork' },
-      { name: 'mixed whitespace', input: ' Austin , TX ' },
-      { name: 'multiple commas', input: 'Austin,,,TX' },
-      { name: 'semicolon separator', input: 'Austin;TX' },
-      { name: 'hyphenated city', input: 'Winston-Salem' },
-      { name: 'city with apostrophe', input: "O'Fallon" },
-      { name: 'city with period', input: 'St. Louis' },
-    ];
+    it('leading spaces: "  Austin" → Austin', () => {
+      const result = g.geocode('  Austin');
+      expect(result.city).toBe('Austin');
+    });
 
-    for (const tt of tests) {
-      it(tt.name, () => {
-        const result = g.geocode(tt.input);
-        void result.city; // just verify no crash
-      });
-    }
+    it('trailing spaces: "Austin  " → Austin', () => {
+      const result = g.geocode('Austin  ');
+      expect(result.city).toBe('Austin');
+    });
+
+    it('leading/trailing spaces match normal query', () => {
+      const normal = g.geocode('Austin');
+      const padded = g.geocode('  Austin  ');
+      expect(padded.city).toBe(normal.city);
+      expect(GeoBed.cityCountry(padded)).toBe(GeoBed.cityCountry(normal));
+    });
+
+    it('multiple spaces: "New  York" → handles gracefully', () => {
+      const result = g.geocode('New  York');
+      expect(result.city).not.toBe('');
+    });
+
+    it('tabs between words: "New\\tYork" → handles gracefully', () => {
+      const result = g.geocode('New\tYork');
+      expect(result.city).not.toBe('');
+    });
+
+    it('mixed whitespace: " Austin , TX " → Austin, TX', () => {
+      const result = g.geocode(' Austin , TX ');
+      expect(result.city).toBe('Austin');
+      expect(GeoBed.cityRegion(result)).toBe('TX');
+    });
+
+    it('multiple commas: "Austin,,,TX" → handles gracefully', () => {
+      const result = g.geocode('Austin,,,TX');
+      expect(result).toBeDefined();
+    });
+
+    it('semicolon separator: "Austin;TX" → handles gracefully', () => {
+      const result = g.geocode('Austin;TX');
+      expect(result).toBeDefined();
+    });
+
+    it('hyphenated city: Winston-Salem → US/NC', () => {
+      const result = g.geocode('Winston-Salem');
+      expect(result.city).toBe('Winston-Salem');
+      expect(GeoBed.cityCountry(result)).toBe('US');
+      expect(GeoBed.cityRegion(result)).toBe('NC');
+    });
+
+    it("city with apostrophe: O'Fallon → US/MO", () => {
+      const result = g.geocode("O'Fallon");
+      expect(result.city).toBe("O'Fallon");
+      expect(GeoBed.cityCountry(result)).toBe('US');
+      expect(GeoBed.cityRegion(result)).toBe('MO');
+    });
+
+    it('city with period: St. Louis → US/MO', () => {
+      const result = g.geocode('St. Louis');
+      expect(result.city).toBe('St. Louis');
+      expect(GeoBed.cityCountry(result)).toBe('US');
+      expect(GeoBed.cityRegion(result)).toBe('MO');
+    });
   });
 });

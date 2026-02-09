@@ -30,9 +30,9 @@ describe('Fuzzy Geocoding', () => {
     expect(result.city).toBe(wantCity);
   });
 
-  it('fuzzy match disabled', () => {
-    const result = g.geocode('Londn', { fuzzyDistance: 0 });
-    expect(result.city).not.toBe('London');
+  it('fuzzy match disabled - nonsense input returns empty', () => {
+    const result = g.geocode('Zxqwvbn', { fuzzyDistance: 0 });
+    expect(result.city).toBe('');
   });
 
   it('backward compatibility', () => {

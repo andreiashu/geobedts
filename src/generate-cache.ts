@@ -1,7 +1,7 @@
 import { initLookupTables } from './string-interner.js';
 import { loadGeonamesCities, loadGeonamesCountryInfo } from './data-loader.js';
 import { storeCache } from './cache.js';
-import { compareCaseInsensitive, toLower } from './utils.js';
+import { compareCaseInsensitive } from './utils.js';
 
 async function main() {
   console.log('Initializing lookup tables...');
@@ -18,22 +18,37 @@ async function main() {
   console.log('Sorting cities...');
   cities.sort((a, b) => compareCaseInsensitive(a.city, b.city));
 
-  console.log('Building city name index...');
-  const cityNameIdx = new Map<string, number>();
-  for (let k = 0; k < cities.length; k++) {
-    const v = cities[k];
-    if (v.city.length === 0) continue;
-    const runes = [...v.city];
-    if (runes.length === 0) continue;
-    const ik = toLower(runes[0]);
-    const existing = cityNameIdx.get(ik);
-    if (existing === undefined || existing < k) {
-      cityNameIdx.set(ik, k);
+  console.log('Building name index...');
+  const nameIndex = new Map<string, number[]>();
+  for (let i = 0; i < cities.length; i++) {
+    const city = cities[i];
+    if (city.city.length > 0) {
+      const key = city.city.toLowerCase();
+      const existing = nameIndex.get(key);
+      if (existing) {
+        existing.push(i);
+      } else {
+        nameIndex.set(key, [i]);
+      }
+    }
+    if (city.cityAlt.length > 0) {
+      const alts = city.cityAlt.split(',');
+      for (const alt of alts) {
+        const trimmed = alt.trim();
+        if (trimmed.length === 0) continue;
+        const key = trimmed.toLowerCase();
+        const existing = nameIndex.get(key);
+        if (existing) {
+          existing.push(i);
+        } else {
+          nameIndex.set(key, [i]);
+        }
+      }
     }
   }
 
   console.log('Storing cache...');
-  storeCache('./geobed-cache', cities, countries, cityNameIdx);
+  storeCache('./geobed-cache', cities, countries, nameIndex);
   console.log('Cache generated successfully!');
 }
 

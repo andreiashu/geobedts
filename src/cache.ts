@@ -46,11 +46,11 @@ export function loadCachedCountryData(cacheDir: string): CountryInfo[] | null {
   return decode(data) as CountryInfo[];
 }
 
-export function loadCachedCityNameIdx(cacheDir: string): Map<string, number> | null {
-  const data = readOptionallyBzipped(join(cacheDir, 'cityNameIdx.msgpack'));
+export function loadCachedNameIndex(cacheDir: string): Map<string, number[]> | null {
+  const data = readOptionallyBzipped(join(cacheDir, 'nameIndex.msgpack'));
   if (!data) return null;
 
-  const obj = decode(data) as Record<string, number>;
+  const obj = decode(data) as Record<string, number[]>;
   return new Map(Object.entries(obj));
 }
 
@@ -58,7 +58,7 @@ export function storeCache(
   cacheDir: string,
   cities: GeobedCity[],
   countries: CountryInfo[],
-  cityNameIdx: Map<string, number>,
+  nameIndex: Map<string, number[]>,
 ): void {
   mkdirSync(cacheDir, { recursive: true });
 
@@ -78,5 +78,5 @@ export function storeCache(
 
   writeFileSync(join(cacheDir, 'cities.msgpack'), Buffer.from(encode(gobCities)));
   writeFileSync(join(cacheDir, 'countries.msgpack'), Buffer.from(encode(countries)));
-  writeFileSync(join(cacheDir, 'cityNameIdx.msgpack'), Buffer.from(encode(Object.fromEntries(cityNameIdx))));
+  writeFileSync(join(cacheDir, 'nameIndex.msgpack'), Buffer.from(encode(Object.fromEntries(nameIndex))));
 }

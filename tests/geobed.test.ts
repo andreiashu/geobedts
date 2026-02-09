@@ -12,10 +12,10 @@ describe('GeoBed', () => {
     expect(g).toBeTruthy();
     expect(g.cities.length).toBeGreaterThan(0);
     expect(g.countries.length).toBeGreaterThan(0);
-    expect(g.cityNameIdx.size).toBeGreaterThan(0);
+    expect(g.nameIndex.size).toBeGreaterThan(0);
     expect(Array.isArray(g.cities)).toBe(true);
     expect(Array.isArray(g.countries)).toBe(true);
-    expect(g.cityNameIdx instanceof Map).toBe(true);
+    expect(g.nameIndex instanceof Map).toBe(true);
   });
 
   it('TestGeocode - should forward geocode cities correctly', () => {

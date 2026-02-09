@@ -1,8 +1,7 @@
-import { existsSync } from 'node:fs';
 import { join, basename } from 'node:path';
 import type {
   GeobedCity, CountryInfo, GeocodeOptions, GeobedConfig,
-  Option, SearchRange,
+  Option,
 } from './types.js';
 import {
   defaultConfig, US_STATE_CODES, S2_CELL_LEVEL,
@@ -10,7 +9,7 @@ import {
   dataSetFiles,
 } from './types.js';
 import { initLookupTables, getCountryInterner, getRegionInterner, internCountry, internRegion } from './string-interner.js';
-import { toLower, toUpper, prev, compareCaseInsensitive } from './utils.js';
+import { toLower, toUpper, compareCaseInsensitive } from './utils.js';
 import { fuzzyMatch } from './fuzzy.js';
 import {
   latLngFromDegrees, angularDistance,
@@ -19,14 +18,14 @@ import {
 } from './s2-geometry.js';
 import { isAdminDivision, getAdminDivisionCountry } from './admin-divisions.js';
 import { loadGeonamesCities, loadMaxMindCities, loadGeonamesCountryInfo, downloadDataSets } from './data-loader.js';
-import { loadCachedCityData, loadCachedCountryData, loadCachedCityNameIdx, storeCache } from './cache.js';
+import { loadCachedCityData, loadCachedCountryData, loadCachedNameIndex, storeCache } from './cache.js';
 
 const ABBREV_REGEX = /[\S]{2,3}/;
 
 export class GeoBed {
   cities: GeobedCity[] = [];
   countries: CountryInfo[] = [];
-  cityNameIdx: Map<string, number> = new Map();
+  nameIndex: Map<string, number[]> = new Map();
   private cellIndex: Map<bigint, number[]> = new Map();
   private config: GeobedConfig;
 
@@ -49,8 +48,8 @@ export class GeoBed {
         g.cities = cities;
         const countries = loadCachedCountryData(cfg.cacheDir);
         if (countries) g.countries = countries;
-        const idx = loadCachedCityNameIdx(cfg.cacheDir);
-        if (idx) g.cityNameIdx = idx;
+        const idx = loadCachedNameIndex(cfg.cacheDir);
+        if (idx) g.nameIndex = idx;
         loaded = true;
       }
     } catch {
@@ -61,7 +60,7 @@ export class GeoBed {
       await downloadDataSets(cfg.dataDir);
       await g.loadDataSets();
       try {
-        storeCache(cfg.cacheDir, g.cities, g.countries, g.cityNameIdx);
+        storeCache(cfg.cacheDir, g.cities, g.countries, g.nameIndex);
       } catch (e) {
         console.warn('warning: failed to store cache:', e);
       }
@@ -99,17 +98,32 @@ export class GeoBed {
     // Sort cities alphabetically (case-insensitive)
     this.cities.sort((a, b) => compareCaseInsensitive(a.city, b.city));
 
-    // Build city name index
-    this.cityNameIdx = new Map();
-    for (let k = 0; k < this.cities.length; k++) {
-      const v = this.cities[k];
-      if (v.city.length === 0) continue;
-      const runes = [...v.city];
-      if (runes.length === 0) continue;
-      const ik = toLower(runes[0]);
-      const existing = this.cityNameIdx.get(ik);
-      if (existing === undefined || existing < k) {
-        this.cityNameIdx.set(ik, k);
+    // Build inverted name index
+    this.nameIndex = new Map();
+    for (let i = 0; i < this.cities.length; i++) {
+      const city = this.cities[i];
+      if (city.city.length > 0) {
+        const key = city.city.toLowerCase();
+        const existing = this.nameIndex.get(key);
+        if (existing) {
+          existing.push(i);
+        } else {
+          this.nameIndex.set(key, [i]);
+        }
+      }
+      if (city.cityAlt.length > 0) {
+        const alts = city.cityAlt.split(',');
+        for (const alt of alts) {
+          const trimmed = alt.trim();
+          if (trimmed.length === 0) continue;
+          const key = trimmed.toLowerCase();
+          const existing = this.nameIndex.get(key);
+          if (existing) {
+            existing.push(i);
+          } else {
+            this.nameIndex.set(key, [i]);
+          }
+        }
       }
     }
   }
@@ -158,7 +172,7 @@ export class GeoBed {
 
   geocode(n: string, opts?: GeocodeOptions): GeobedCity {
     const empty: GeobedCity = { city: '', cityAlt: '', countryIdx: 0, regionIdx: 0, latitude: 0, longitude: 0, population: 0 };
-    n = n.trim();
+    n = n.replace(/\s+/g, ' ').trim();
     if (n === '') return empty;
 
     // Truncate long inputs
@@ -220,19 +234,29 @@ export class GeoBed {
     let result: GeobedCity = { city: '', cityAlt: '', countryIdx: 0, regionIdx: 0, latitude: 0, longitude: 0, population: 0 };
     const { countryISO: nCo, stateCode: nSt, nameSlice: nSlice } = this.extractLocationPieces(n);
     const nWithoutAbbrev = nSlice.join(' ');
-    const ranges = this.getSearchRange(nSlice);
+
+    // Collect candidate indices from the inverted index
+    const candidateSet = new Set<number>();
+    const lookups = [n.toLowerCase(), nWithoutAbbrev.toLowerCase()];
+    for (const ns of nSlice) {
+      const trimmed = ns.replace(/,$/g, '');
+      if (trimmed.length > 0) lookups.push(trimmed.toLowerCase());
+    }
+    for (const key of lookups) {
+      const indices = this.nameIndex.get(key);
+      if (indices) {
+        for (const idx of indices) candidateSet.add(idx);
+      }
+    }
 
     const matchingCities: GeobedCity[] = [];
 
-    for (const rng of ranges) {
-      for (let i = rng.from; i < rng.to; i++) {
-        const v = this.cities[i];
-        if (n.toLowerCase() === v.city.toLowerCase()) {
-          matchingCities.push(v);
-        }
-        if (nWithoutAbbrev.toLowerCase() === v.city.toLowerCase()) {
-          matchingCities.push(v);
-        }
+    for (const i of candidateSet) {
+      const v = this.cities[i];
+      if (n.toLowerCase() === v.city.toLowerCase()) {
+        matchingCities.push(v);
+      } else if (nWithoutAbbrev.toLowerCase() === v.city.toLowerCase()) {
+        matchingCities.push(v);
       }
     }
 
@@ -285,84 +309,126 @@ export class GeoBed {
   }
 
   private fuzzyMatchLocation(n: string, opts: GeocodeOptions): GeobedCity {
+    const empty: GeobedCity = { city: '', cityAlt: '', countryIdx: 0, regionIdx: 0, latitude: 0, longitude: 0, population: 0 };
     const { countryISO: nCo, stateCode: nSt, abbrevSlice, nameSlice: nSlice } = this.extractLocationPieces(n);
-    const ranges = this.getSearchRange(nSlice);
 
-    const bestMatchingKeys: Map<number, number> = new Map();
-    let bestMatchingKey = 0;
+    // Collect candidate indices from the inverted index
+    const candidateSet = new Set<number>();
+    const nLower = n.toLowerCase();
+    const fullIndices = this.nameIndex.get(nLower);
+    if (fullIndices) {
+      for (const idx of fullIndices) candidateSet.add(idx);
+    }
+    // Look up the joined name slice (handles multi-word names like "New York")
+    const joinedSlice = nSlice.join(' ').toLowerCase();
+    if (joinedSlice !== nLower) {
+      const joinedIndices = this.nameIndex.get(joinedSlice);
+      if (joinedIndices) {
+        for (const idx of joinedIndices) candidateSet.add(idx);
+      }
+    }
+    for (const ns of nSlice) {
+      const trimmed = ns.replace(/,$/g, '').toLowerCase();
+      if (trimmed.length === 0) continue;
+      const indices = this.nameIndex.get(trimmed);
+      if (indices) {
+        for (const idx of indices) candidateSet.add(idx);
+      }
+    }
 
-    for (const rng of ranges) {
-      for (let i = rng.from; i < rng.to; i++) {
-        const v = this.cities[i];
-        const vCountry = GeoBed.cityCountry(v);
-        const vRegion = GeoBed.cityRegion(v);
-
-        // Fast path for simple "City, ST" format
-        if (nSt !== '') {
-          if (n.toLowerCase() === v.city.toLowerCase() && nSt.toLowerCase() === vRegion.toLowerCase()) {
-            return v;
-          }
-        }
-
-        let score = bestMatchingKeys.get(i) || 0;
-
-        for (const av of abbrevSlice) {
-          const lowerAv = toLower(av);
-          if (av.length === 2 && vRegion.toLowerCase() === lowerAv) {
-            score += 5;
-          }
-          if (av.length === 2 && vCountry.toLowerCase() === lowerAv) {
-            score += 3;
-          }
-        }
-
-        if (nCo !== '' && nCo === vCountry) {
-          score += 4;
-        }
-
-        if (nSt !== '' && nSt === vRegion) {
-          score += 4;
-        }
-
-        if (v.cityAlt !== '') {
-          const alts = v.cityAlt.split(/\s+/);
-          for (const altV of alts) {
-            if (altV.toLowerCase() === n.toLowerCase()) {
-              score += 3;
-            }
-            if (altV === n) {
-              score += 5;
+    // When fuzzy matching is enabled, scan index keys for fuzzy matches
+    if (opts.fuzzyDistance && opts.fuzzyDistance > 0) {
+      const queryTerms = nSlice.map(ns => ns.replace(/,$/g, '')).filter(t => t.length > 2);
+      if (queryTerms.length > 0) {
+        for (const [name, indices] of this.nameIndex) {
+          for (const term of queryTerms) {
+            if (fuzzyMatch(term, name, opts.fuzzyDistance)) {
+              for (const idx of indices) candidateSet.add(idx);
+              break;
             }
           }
-        }
-
-        // Exact match gets highest bonus
-        if (n.toLowerCase() === v.city.toLowerCase()) {
-          score += 7;
-        } else if (opts.fuzzyDistance && opts.fuzzyDistance > 0) {
-          for (const ns of nSlice) {
-            const trimmed = ns.replace(/,$/g, '');
-            if (trimmed.length > 2 && fuzzyMatch(trimmed, v.city, opts.fuzzyDistance)) {
-              score += 5;
-            }
-          }
-        }
-
-        for (const ns of nSlice) {
-          const trimmed = ns.replace(/,$/g, '');
-          if (toLower(v.city).includes(toLower(trimmed))) {
-            score += 2;
-          }
-          if (v.city.toLowerCase() === trimmed.toLowerCase()) {
-            score += 1;
-          }
-        }
-
-        if (score > 0) {
-          bestMatchingKeys.set(i, score);
         }
       }
     }
+
+    if (candidateSet.size === 0) return empty;
+
+    const bestMatchingKeys: Map<number, number> = new Map();
+
+    for (const i of candidateSet) {
+      const v = this.cities[i];
+      const vCountry = GeoBed.cityCountry(v);
+      const vRegion = GeoBed.cityRegion(v);
+
+      // Fast path for simple "City, ST" format
+      if (nSt !== '') {
+        if (nLower === v.city.toLowerCase() && nSt.toLowerCase() === vRegion.toLowerCase()) {
+          return v;
+        }
+      }
+
+      let score = 0;
+
+      for (const av of abbrevSlice) {
+        const lowerAv = toLower(av);
+        if (av.length === 2 && vRegion.toLowerCase() === lowerAv) {
+          score += 5;
+        }
+        if (av.length === 2 && vCountry.toLowerCase() === lowerAv) {
+          score += 3;
+        }
+      }
+
+      if (nCo !== '' && nCo === vCountry) {
+        score += 4;
+      }
+
+      if (nSt !== '' && nSt === vRegion) {
+        score += 4;
+      }
+
+      if (v.cityAlt !== '') {
+        const alts = v.cityAlt.split(',');
+        for (const rawAlt of alts) {
+          const altV = rawAlt.trim();
+          if (altV.length === 0) continue;
+          if (altV.toLowerCase() === nLower) {
+            score += 3;
+          }
+          if (altV === n) {
+            score += 5;
+          }
+        }
+      }
+
+      // Exact match gets highest bonus
+      if (nLower === v.city.toLowerCase()) {
+        score += 7;
+      } else if (opts.fuzzyDistance && opts.fuzzyDistance > 0) {
+        for (const ns of nSlice) {
+          const trimmed = ns.replace(/,$/g, '');
+          if (trimmed.length > 2 && fuzzyMatch(trimmed, v.city, opts.fuzzyDistance)) {
+            score += 5;
+          }
+        }
+      }
+
+      for (const ns of nSlice) {
+        const trimmed = ns.replace(/,$/g, '');
+        if (toLower(v.city).includes(toLower(trimmed))) {
+          score += 2;
+        }
+        if (v.city.toLowerCase() === trimmed.toLowerCase()) {
+          score += 1;
+        }
+      }
+
+      if (score > 0) {
+        bestMatchingKeys.set(i, score);
+      }
+    }
+
+    if (bestMatchingKeys.size === 0) return empty;
 
     if (nCo === '') {
       let hp = 0;
@@ -382,12 +448,13 @@ export class GeoBed {
     }
 
     let m = 0;
+    let bestMatchingKey = -1;
     for (const [k, v] of bestMatchingKeys) {
       if (v > m) {
         m = v;
         bestMatchingKey = k;
       }
-      if (v === m && this.cities[k].population > this.cities[bestMatchingKey].population) {
+      if (v === m && bestMatchingKey >= 0 && this.cities[k].population > this.cities[bestMatchingKey].population) {
         bestMatchingKey = k;
       }
     }
@@ -395,7 +462,7 @@ export class GeoBed {
     if (bestMatchingKey >= 0 && bestMatchingKey < this.cities.length) {
       return this.cities[bestMatchingKey];
     }
-    return { city: '', cityAlt: '', countryIdx: 0, regionIdx: 0, latitude: 0, longitude: 0, population: 0 };
+    return empty;
   }
 
   private extractLocationPieces(n: string): {
@@ -522,38 +589,6 @@ export class GeoBed {
     const nameSlice = n.split(' ');
 
     return { countryISO, stateCode, abbrevSlice, nameSlice };
-  }
-
-  private getSearchRange(nSlice: string[]): SearchRange[] {
-    const ranges: SearchRange[] = [];
-    for (const ns of nSlice) {
-      const trimmed = ns.replace(/,$/g, '');
-      if (trimmed.length > 0) {
-        const runes = [...trimmed];
-        const fc = runes[0].toLowerCase();
-        const pik = prev(fc);
-
-        let fk = 0;
-        if (pik !== '') {
-          const val = this.cityNameIdx.get(pik);
-          if (val !== undefined) {
-            fk = val + 1;
-          }
-        }
-
-        let tk = this.cities.length;
-        const tkVal = this.cityNameIdx.get(fc);
-        if (tkVal !== undefined) {
-          tk = tkVal + 1;
-        }
-
-        if (fk > tk) fk = tk;
-        if (tk > this.cities.length) tk = this.cities.length;
-
-        ranges.push({ from: fk, to: tk });
-      }
-    }
-    return ranges;
   }
 
   // --- Accessor for config ---
