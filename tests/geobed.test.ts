@@ -60,7 +60,7 @@ describe('GeoBed', () => {
     expect(r.city).toBe('Stanford');
 
     r = g.reverseGeocode(51.51279, -0.09184);
-    expect(r.city).toBe('City of London');
+    expect(r.city).toBe('London');
   });
 
   it('TestNext - should test prev function', () => {

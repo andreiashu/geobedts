@@ -163,7 +163,7 @@ function cellIDFace(id: CellID): number {
 }
 
 function cellIDLevel(id: CellID): number {
-  if ((id & 1n) === 0n) return -1;
+  if (id === 0n) return -1;
   let lsb = id & (-id);
   let level = MAX_LEVEL;
   while (lsb > 1n) {

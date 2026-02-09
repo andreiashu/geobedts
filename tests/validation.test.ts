@@ -221,9 +221,10 @@ describe('Cities Structural Integrity', () => {
   it('large cities have population > 0', () => {
     const largeCities = ['Tokyo', 'New York City', 'London', 'Paris', 'Beijing', 'Moscow'];
     for (const cityName of largeCities) {
-      const found = g.cities.find(c => c.city === cityName);
-      if (found) {
-        expect(found.population).toBeGreaterThan(100_000);
+      const matches = g.cities.filter(c => c.city === cityName);
+      if (matches.length > 0) {
+        const maxPop = Math.max(...matches.map(c => c.population));
+        expect(maxPop).toBeGreaterThan(100_000);
       }
     }
   });

@@ -194,8 +194,8 @@ export class GeoBed {
     const leafCell = cellIDFromLatLng(queryLL);
     const queryCell = cellIDParentAtLevel(leafCell, S2_CELL_LEVEL);
 
-    let closest: GeobedCity = { city: '', cityAlt: '', countryIdx: 0, regionIdx: 0, latitude: 0, longitude: 0, population: 0 };
-    let minDist = Infinity;
+    // Collect all nearby candidates with their distances
+    const candidates: { city: GeobedCity; dist: number }[] = [];
 
     for (const cell of this.cellAndNeighbors(queryCell)) {
       const indices = this.cellIndex.get(cell);
@@ -205,17 +205,38 @@ export class GeoBed {
         const city = this.cities[idx];
         const cityLL = latLngFromDegrees(city.latitude, city.longitude);
         const dist = angularDistance(queryLL, cityLL);
+        candidates.push({ city, dist });
+      }
+    }
 
-        if (dist < minDist) {
-          minDist = dist;
-          closest = city;
-        } else if (dist === minDist && city.population > closest.population) {
-          closest = city;
+    if (candidates.length === 0) {
+      return { city: '', cityAlt: '', countryIdx: 0, regionIdx: 0, latitude: 0, longitude: 0, population: 0 };
+    }
+
+    // Find the closest candidate
+    candidates.sort((a, b) => a.dist - b.dist || b.city.population - a.city.population);
+    let best = candidates[0];
+
+    // Discard results that are unreasonably far (~100km)
+    const MAX_DISTANCE = 0.0157; // ~100km in radians
+    if (best.dist > MAX_DISTANCE) {
+      return { city: '', cityAlt: '', countryIdx: 0, regionIdx: 0, latitude: 0, longitude: 0, population: 0 };
+    }
+
+    // When the closest match is a small place (likely a neighborhood/district),
+    // prefer a nearby major city within ~10km that has 10x+ the population.
+    if (best.city.population < 500_000) {
+      const NEARBY_THRESHOLD = 0.00157; // ~10km in radians
+      for (let i = 1; i < candidates.length; i++) {
+        const c = candidates[i];
+        if (c.dist > NEARBY_THRESHOLD) break;
+        if (c.city.population > best.city.population * 10) {
+          best = c;
         }
       }
     }
 
-    return closest;
+    return best.city;
   }
 
   // --- City accessor helpers ---
