@@ -12,7 +12,7 @@
     }
   },
   "scripts": {
-    "prepare": "git config core.hooksPath .hooks && tsc",
+    "prepare": "git config core.hooksPath .hooks 2>/dev/null; tsc",
     "build": "tsc",
     "test": "vitest run",
     "test:watch": "vitest",
