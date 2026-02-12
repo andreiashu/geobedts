@@ -41,8 +41,11 @@ export class GeoBed {
         catch {
             // Cache load failed, fall through to raw data
         }
+        // Always ensure data files are present (e.g. admin1CodesASCII.txt is
+        // read lazily and not included in the cache). downloadDataSets skips
+        // files that already exist, so this is cheap after the first run.
+        await downloadDataSets(cfg.dataDir);
         if (!loaded || g.cities.length === 0) {
-            await downloadDataSets(cfg.dataDir);
             await g.loadDataSets();
             try {
                 storeCache(cfg.cacheDir, g.cities, g.countries, g.nameIndex);
