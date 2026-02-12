@@ -1,0 +1,7 @@
+#!/bin/sh
+
+# Rebuild dist/ before committing to keep it in sync with source
+npm run build
+
+# Stage any updated dist files
+git add dist/
