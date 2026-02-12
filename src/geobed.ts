@@ -76,13 +76,13 @@ export class GeoBed {
       switch (f.id) {
         case 'geonamesCities1000': {
           const cities = await loadGeonamesCities(localPath);
-          this.cities.push(...cities);
+          for (const c of cities) this.cities.push(c);
           break;
         }
         case 'maxmindWorldCities': {
           try {
             const cities = await loadMaxMindCities(localPath);
-            this.cities.push(...cities);
+            for (const c of cities) this.cities.push(c);
           } catch {
             // MaxMind is optional
           }
