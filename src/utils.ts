@@ -6,10 +6,8 @@ export function toUpper(s: string): string {
   return s.toUpperCase();
 }
 
-export function prev(r: string): string {
-  const code = r.codePointAt(0);
-  if (code === undefined || code <= 0) return '';
-  return String.fromCodePoint(code - 1);
+export function stripDiacritics(s: string): string {
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
 
 export function compareCaseInsensitive(a: string, b: string): number {

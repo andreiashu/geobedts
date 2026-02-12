@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll } from 'vitest';
-import { GeoBed, prev, toLower, toUpper } from '../src/index.js';
+import { GeoBed, toLower, toUpper } from '../src/index.js';
 
 describe('GeoBed', () => {
   let g: GeoBed;
@@ -61,11 +61,6 @@ describe('GeoBed', () => {
 
     r = g.reverseGeocode(51.51279, -0.09184);
     expect(r.city).toBe('London');
-  });
-
-  it('TestNext - should test prev function', () => {
-    expect(prev('n')).toBe('m');
-    expect(prev('n').codePointAt(0)).toBe(109);
   });
 
   it('TestToUpper - should convert to uppercase', () => {

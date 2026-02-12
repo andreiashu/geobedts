@@ -4,6 +4,7 @@ export declare class GeoBed {
     countries: CountryInfo[];
     nameIndex: Map<string, number[]>;
     private cellIndex;
+    private countriesByNameLength;
     private config;
     private constructor();
     static create(...opts: Option[]): Promise<GeoBed>;

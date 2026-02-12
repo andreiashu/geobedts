@@ -1,18 +1,19 @@
 import { join, basename } from 'node:path';
 import { defaultConfig, US_STATE_CODES, S2_CELL_LEVEL, MAX_GEOCODE_INPUT_LEN, MIN_CITY_COUNT, MIN_COUNTRY_COUNT, dataSetFiles, } from './types.js';
 import { initLookupTables, getCountryInterner, getRegionInterner } from './string-interner.js';
-import { toLower, toUpper, compareCaseInsensitive } from './utils.js';
+import { toLower, toUpper, compareCaseInsensitive, stripDiacritics } from './utils.js';
 import { fuzzyMatch } from './fuzzy.js';
 import { latLngFromDegrees, angularDistance, cellIDFromLatLng, cellIDParentAtLevel, cellIDEdgeNeighbors, } from './s2-geometry.js';
 import { isAdminDivision, getAdminDivisionCountry } from './admin-divisions.js';
 import { loadGeonamesCities, loadMaxMindCities, loadGeonamesCountryInfo, downloadDataSets } from './data-loader.js';
 import { loadCachedCityData, loadCachedCountryData, loadCachedNameIndex, storeCache } from './cache.js';
-const ABBREV_REGEX = /[\S]{2,3}/;
+import { buildNameIndex } from './name-index.js';
 export class GeoBed {
     cities = [];
     countries = [];
     nameIndex = new Map();
     cellIndex = new Map();
+    countriesByNameLength = [];
     config;
     constructor(config) {
         this.config = config;
@@ -23,19 +24,19 @@ export class GeoBed {
             opt(cfg);
         const g = new GeoBed(cfg);
         initLookupTables();
-        // Try loading from cache
+        // Try loading from cache — only use if all components loaded successfully
         let loaded = false;
         try {
             const cities = loadCachedCityData(cfg.cacheDir);
             if (cities && cities.length > 0) {
-                g.cities = cities;
                 const countries = loadCachedCountryData(cfg.cacheDir);
-                if (countries)
-                    g.countries = countries;
                 const idx = loadCachedNameIndex(cfg.cacheDir);
-                if (idx)
+                if (countries && countries.length > 0 && idx && idx.size > 0) {
+                    g.cities = cities;
+                    g.countries = countries;
                     g.nameIndex = idx;
-                loaded = true;
+                    loaded = true;
+                }
             }
         }
         catch {
@@ -54,6 +55,7 @@ export class GeoBed {
                 console.warn('warning: failed to store cache:', e);
             }
         }
+        g.countriesByNameLength = [...g.countries].sort((a, b) => b.country.length - a.country.length);
         g.buildCellIndex();
         return g;
     }
@@ -87,36 +89,7 @@ export class GeoBed {
         // Sort cities alphabetically (case-insensitive)
         this.cities.sort((a, b) => compareCaseInsensitive(a.city, b.city));
         // Build inverted name index
-        this.nameIndex = new Map();
-        for (let i = 0; i < this.cities.length; i++) {
-            const city = this.cities[i];
-            if (city.city.length > 0) {
-                const key = city.city.toLowerCase();
-                const existing = this.nameIndex.get(key);
-                if (existing) {
-                    existing.push(i);
-                }
-                else {
-                    this.nameIndex.set(key, [i]);
-                }
-            }
-            if (city.cityAlt.length > 0) {
-                const alts = city.cityAlt.split(',');
-                for (const alt of alts) {
-                    const trimmed = alt.trim();
-                    if (trimmed.length === 0)
-                        continue;
-                    const key = trimmed.toLowerCase();
-                    const existing = this.nameIndex.get(key);
-                    if (existing) {
-                        existing.push(i);
-                    }
-                    else {
-                        this.nameIndex.set(key, [i]);
-                    }
-                }
-            }
-        }
+        this.nameIndex = buildNameIndex(this.cities);
     }
     buildCellIndex() {
         this.cellIndex = new Map();
@@ -172,6 +145,10 @@ export class GeoBed {
         return this.fuzzyMatchLocation(n, options);
     }
     reverseGeocode(lat, lng) {
+        const empty = { city: '', cityAlt: '', countryIdx: 0, regionIdx: 0, latitude: 0, longitude: 0, population: 0 };
+        if (!isFinite(lat) || !isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+            return empty;
+        }
         const queryLL = latLngFromDegrees(lat, lng);
         const leafCell = cellIDFromLatLng(queryLL);
         const queryCell = cellIDParentAtLevel(leafCell, S2_CELL_LEVEL);
@@ -292,6 +269,13 @@ export class GeoBed {
                 }
                 result = biggestCity;
             }
+            // If still no match (no qualifier given), fall back to highest-population match
+            if (result.city === '') {
+                for (const city of matchingCities) {
+                    if (city.population > result.population)
+                        result = city;
+                }
+            }
         }
         return result;
     }
@@ -371,20 +355,26 @@ export class GeoBed {
             }
             if (v.cityAlt !== '') {
                 const alts = v.cityAlt.split(',');
+                let hasExactAlt = false;
+                let hasCaseInsensitiveAlt = false;
                 for (const rawAlt of alts) {
                     const altV = rawAlt.trim();
                     if (altV.length === 0)
                         continue;
-                    if (altV.toLowerCase() === nLower) {
-                        score += 3;
-                    }
-                    if (altV === n) {
-                        score += 5;
-                    }
+                    if (!hasCaseInsensitiveAlt && altV.toLowerCase() === nLower)
+                        hasCaseInsensitiveAlt = true;
+                    if (!hasExactAlt && altV === n)
+                        hasExactAlt = true;
+                    if (hasExactAlt && hasCaseInsensitiveAlt)
+                        break;
                 }
+                if (hasCaseInsensitiveAlt)
+                    score += 3;
+                if (hasExactAlt)
+                    score += 5;
             }
-            // Exact match gets highest bonus
-            if (nLower === v.city.toLowerCase()) {
+            // Exact match gets highest bonus (normalize diacritics for comparison)
+            if (nLower === v.city.toLowerCase() || nLower === stripDiacritics(v.city.toLowerCase())) {
                 score += 7;
             }
             else if (opts.fuzzyDistance && opts.fuzzyDistance > 0) {
@@ -397,10 +387,12 @@ export class GeoBed {
             }
             for (const ns of nSlice) {
                 const trimmed = ns.replace(/,$/g, '');
-                if (toLower(v.city).includes(toLower(trimmed))) {
+                const cityLower = toLower(v.city);
+                const trimmedLower = toLower(trimmed);
+                if (cityLower.includes(trimmedLower) || stripDiacritics(cityLower).includes(trimmedLower)) {
                     score += 2;
                 }
-                if (v.city.toLowerCase() === trimmed.toLowerCase()) {
+                if (cityLower === trimmedLower || stripDiacritics(cityLower) === trimmedLower) {
                     score += 1;
                 }
             }
@@ -443,11 +435,13 @@ export class GeoBed {
         return empty;
     }
     extractLocationPieces(n) {
-        const abbrevMatch = ABBREV_REGEX.exec(n);
-        const abbrevSlice = abbrevMatch ? [abbrevMatch[0]] : [];
+        const abbrevSlice = [];
+        for (const m of n.matchAll(/\b([A-Z]{2,3})\b/g)) {
+            abbrevSlice.push(m[1]);
+        }
         let countryISO = '';
-        // Check for country names
-        for (const co of this.countries) {
+        // Check for country names (sorted longest-first to avoid partial prefix matches)
+        for (const co of this.countriesByNameLength) {
             const countryName = co.country;
             const countryNameLower = toLower(countryName);
             const nLower = toLower(n);
@@ -527,6 +521,52 @@ export class GeoBed {
                 if (countryISO === '')
                     countryISO = 'US';
                 break;
+            }
+        }
+        // Check full US state names (e.g. "Illinois", "California")
+        if (stateCode === '') {
+            for (const [code, fullName] of Object.entries(US_STATE_CODES)) {
+                const fullNameLower = toLower(fullName);
+                const nLower = toLower(n);
+                if (nLower === fullNameLower) {
+                    stateCode = code;
+                    n = '';
+                    if (countryISO === '')
+                        countryISO = 'US';
+                    break;
+                }
+                const prefixWithComma = fullNameLower + ', ';
+                if (nLower.length > prefixWithComma.length && nLower.substring(0, prefixWithComma.length) === prefixWithComma) {
+                    stateCode = code;
+                    n = n.substring(prefixWithComma.length);
+                    if (countryISO === '')
+                        countryISO = 'US';
+                    break;
+                }
+                const prefixWithSpace = fullNameLower + ' ';
+                if (nLower.length > prefixWithSpace.length && nLower.substring(0, prefixWithSpace.length) === prefixWithSpace) {
+                    stateCode = code;
+                    n = n.substring(prefixWithSpace.length);
+                    if (countryISO === '')
+                        countryISO = 'US';
+                    break;
+                }
+                const suffixWithComma = ', ' + fullNameLower;
+                if (nLower.length > suffixWithComma.length && nLower.substring(nLower.length - suffixWithComma.length) === suffixWithComma) {
+                    stateCode = code;
+                    n = n.substring(0, n.length - suffixWithComma.length);
+                    if (countryISO === '')
+                        countryISO = 'US';
+                    break;
+                }
+                const suffixWithSpace = ' ' + fullNameLower;
+                if (nLower.length > suffixWithSpace.length && nLower.substring(nLower.length - suffixWithSpace.length) === suffixWithSpace) {
+                    stateCode = code;
+                    n = n.substring(0, n.length - suffixWithSpace.length);
+                    if (countryISO === '')
+                        countryISO = 'US';
+                    break;
+                }
             }
         }
         // If no US state matched, check international admin divisions

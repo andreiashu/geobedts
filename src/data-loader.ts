@@ -4,6 +4,7 @@ import { createInterface } from 'node:readline';
 import { createGunzip } from 'node:zlib';
 import * as yauzl from 'yauzl';
 import type { GeobedCity, CountryInfo } from './types.js';
+import { dataSetFiles } from './types.js';
 import { internCountry, internRegion } from './string-interner.js';
 import { toUpper } from './utils.js';
 
@@ -157,25 +158,25 @@ export function loadGeonamesCountryInfo(path: string): CountryInfo[] {
 }
 
 export async function downloadFile(url: string, path: string): Promise<void> {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`HTTP GET ${url}: status ${response.status}`);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30_000);
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) {
+      throw new Error(`HTTP GET ${url}: status ${response.status}`);
+    }
+    const buffer = Buffer.from(await response.arrayBuffer());
+    writeFileSync(path, buffer);
+  } finally {
+    clearTimeout(timeout);
   }
-  const buffer = Buffer.from(await response.arrayBuffer());
-  writeFileSync(path, buffer);
 }
 
 export async function downloadDataSets(dataDir: string): Promise<void> {
   mkdirSync(dataDir, { recursive: true });
 
-  const files = [
-    { url: 'https://download.geonames.org/export/dump/cities1000.zip', name: 'cities1000.zip' },
-    { url: 'https://download.geonames.org/export/dump/countryInfo.txt', name: 'countryInfo.txt' },
-    { url: 'https://download.geonames.org/export/dump/admin1CodesASCII.txt', name: 'admin1CodesASCII.txt' },
-  ];
-
-  for (const f of files) {
-    const localPath = join(dataDir, f.name);
+  for (const f of dataSetFiles) {
+    const localPath = join(dataDir, basename(f.path));
     if (existsSync(localPath)) continue;
     await downloadFile(f.url, localPath);
   }

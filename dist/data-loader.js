@@ -1,8 +1,9 @@
 import { readFileSync, createReadStream, existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, basename } from 'node:path';
 import { createInterface } from 'node:readline';
 import { createGunzip } from 'node:zlib';
 import * as yauzl from 'yauzl';
+import { dataSetFiles } from './types.js';
 import { internCountry, internRegion } from './string-interner.js';
 import { toUpper } from './utils.js';
 export async function loadGeonamesCities(path) {
@@ -140,22 +141,24 @@ export function loadGeonamesCountryInfo(path) {
     return countries;
 }
 export async function downloadFile(url, path) {
-    const response = await fetch(url);
-    if (!response.ok) {
-        throw new Error(`HTTP GET ${url}: status ${response.status}`);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30_000);
+    try {
+        const response = await fetch(url, { signal: controller.signal });
+        if (!response.ok) {
+            throw new Error(`HTTP GET ${url}: status ${response.status}`);
+        }
+        const buffer = Buffer.from(await response.arrayBuffer());
+        writeFileSync(path, buffer);
     }
-    const buffer = Buffer.from(await response.arrayBuffer());
-    writeFileSync(path, buffer);
+    finally {
+        clearTimeout(timeout);
+    }
 }
 export async function downloadDataSets(dataDir) {
     mkdirSync(dataDir, { recursive: true });
-    const files = [
-        { url: 'https://download.geonames.org/export/dump/cities1000.zip', name: 'cities1000.zip' },
-        { url: 'https://download.geonames.org/export/dump/countryInfo.txt', name: 'countryInfo.txt' },
-        { url: 'https://download.geonames.org/export/dump/admin1CodesASCII.txt', name: 'admin1CodesASCII.txt' },
-    ];
-    for (const f of files) {
-        const localPath = join(dataDir, f.name);
+    for (const f of dataSetFiles) {
+        const localPath = join(dataDir, basename(f.path));
         if (existsSync(localPath))
             continue;
         await downloadFile(f.url, localPath);

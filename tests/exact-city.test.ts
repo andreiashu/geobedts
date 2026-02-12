@@ -191,36 +191,28 @@ describe('Exact City Match (exactMatchCity)', () => {
   // ──────────────────────────────────────────────
 
   describe('Ambiguous names without qualifier (exact mode)', () => {
-    it('London (no qualifier) → empty (multiple matches, no region)', () => {
+    it('London (no qualifier) → GB (highest-population London)', () => {
       const result = g.geocode('London', { exactCity: true });
-      // With multiple Londons and no region/country qualifier,
-      // exactCity may return empty (no disambiguation possible)
-      // or may return one based on internal ordering
-      // Document actual behavior:
-      if (result.city !== '') {
-        expect(result.city).toBe('London');
-      }
+      expect(result.city).toBe('London');
+      expect(GeoBed.cityCountry(result)).toBe('GB');
     });
 
-    it('Dublin (no qualifier) → documents behavior', () => {
+    it('Dublin (no qualifier) → IE (highest-population Dublin)', () => {
       const result = g.geocode('Dublin', { exactCity: true });
-      if (result.city !== '') {
-        expect(result.city).toBe('Dublin');
-      }
+      expect(result.city).toBe('Dublin');
+      expect(GeoBed.cityCountry(result)).toBe('IE');
     });
 
-    it('Austin (no qualifier) → documents behavior', () => {
+    it('Austin (no qualifier) → US (highest-population Austin)', () => {
       const result = g.geocode('Austin', { exactCity: true });
-      if (result.city !== '') {
-        expect(result.city).toBe('Austin');
-      }
+      expect(result.city).toBe('Austin');
+      expect(GeoBed.cityCountry(result)).toBe('US');
     });
 
-    it('Paris (no qualifier) → documents behavior', () => {
+    it('Paris (no qualifier) → FR (highest-population Paris)', () => {
       const result = g.geocode('Paris', { exactCity: true });
-      if (result.city !== '') {
-        expect(result.city).toBe('Paris');
-      }
+      expect(result.city).toBe('Paris');
+      expect(GeoBed.cityCountry(result)).toBe('FR');
     });
   });
 

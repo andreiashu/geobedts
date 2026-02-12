@@ -4,11 +4,8 @@ export function toLower(s) {
 export function toUpper(s) {
     return s.toUpperCase();
 }
-export function prev(r) {
-    const code = r.codePointAt(0);
-    if (code === undefined || code <= 0)
-        return '';
-    return String.fromCodePoint(code - 1);
+export function stripDiacritics(s) {
+    return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
 export function compareCaseInsensitive(a, b) {
     const aLower = a.toLowerCase();

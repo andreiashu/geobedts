@@ -30,12 +30,8 @@ describe('World Coverage', () => {
     it('Cairo → EG', () => {
       const result = g.geocode('Cairo');
       expect(result.city).toBe('Cairo');
-      // Cairo exists in both EG and US — without qualifier, document behavior
-      const country = GeoBed.cityCountry(result);
-      if (country !== 'EG') {
-        // BUG: Cairo without qualifier returns US Cairo
-        expect(country).toBe('US');
-      }
+      expect(GeoBed.cityCountry(result)).toBe('EG');
+      expect(result.population).toBeGreaterThan(1_000_000);
     });
 
     it('Cairo, Egypt → EG', () => {
@@ -107,16 +103,11 @@ describe('World Coverage', () => {
       expect(result.population).toBeGreaterThan(0);
     });
 
-    it('Lima → documents disambiguation behavior', () => {
-      // BUG: Lima without qualifier may return Lima, PY instead of Lima, PE
+    it('Lima → PE', () => {
       const result = g.geocode('Lima');
       expect(result.city).toBe('Lima');
-      const country = GeoBed.cityCountry(result);
-      // Document actual behavior
-      if (country !== 'PE') {
-        // Known disambiguation issue
-        expect(country).not.toBe('');
-      }
+      expect(GeoBed.cityCountry(result)).toBe('PE');
+      expect(result.population).toBeGreaterThan(1_000_000);
     });
 
     it('Lima, Peru → PE', () => {
@@ -126,15 +117,10 @@ describe('World Coverage', () => {
       expect(result.population).toBeGreaterThan(0);
     });
 
-    it('Bogota → documents disambiguation behavior', () => {
-      // BUG: Bogota without qualifier may return Bogota, US instead of Bogota, CO
+    it('Bogota → CO', () => {
       const result = g.geocode('Bogota');
-      const country = GeoBed.cityCountry(result);
-      // Document actual behavior
-      if (country !== 'CO') {
-        // Known disambiguation issue — Bogota, US returned
-        expect(result.city).not.toBe('');
-      }
+      expect(GeoBed.cityCountry(result)).toBe('CO');
+      expect(result.population).toBeGreaterThan(1_000_000);
     });
 
     it('Bogota, Colombia → CO', () => {

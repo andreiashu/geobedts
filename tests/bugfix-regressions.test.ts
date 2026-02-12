@@ -311,4 +311,65 @@ describe('Bug fix regressions', () => {
       expect(GeoBed.cityCountry(result)).toBe('US');
     });
   });
+
+  // ──────────────────────────────────────────────
+  // Bug 7: Coordinate validation — invalid inputs return empty
+  // ──────────────────────────────────────────────
+
+  describe('Coordinate validation', () => {
+    it('NaN latitude returns empty', () => {
+      const result = g.reverseGeocode(NaN, -97.7431);
+      expect(result.city).toBe('');
+    });
+
+    it('NaN longitude returns empty', () => {
+      const result = g.reverseGeocode(30.2672, NaN);
+      expect(result.city).toBe('');
+    });
+
+    it('Infinity latitude returns empty', () => {
+      const result = g.reverseGeocode(Infinity, -97.7431);
+      expect(result.city).toBe('');
+    });
+
+    it('-Infinity longitude returns empty', () => {
+      const result = g.reverseGeocode(30.2672, -Infinity);
+      expect(result.city).toBe('');
+    });
+
+    it('lat=91 (out of range) returns empty', () => {
+      const result = g.reverseGeocode(91, 0);
+      expect(result.city).toBe('');
+    });
+
+    it('lat=-91 (out of range) returns empty', () => {
+      const result = g.reverseGeocode(-91, 0);
+      expect(result.city).toBe('');
+    });
+
+    it('lng=181 (out of range) returns empty', () => {
+      const result = g.reverseGeocode(0, 181);
+      expect(result.city).toBe('');
+    });
+
+    it('lng=-181 (out of range) returns empty', () => {
+      const result = g.reverseGeocode(0, -181);
+      expect(result.city).toBe('');
+    });
+
+    it('both NaN returns empty', () => {
+      const result = g.reverseGeocode(NaN, NaN);
+      expect(result.city).toBe('');
+    });
+
+    it('valid boundary values still work', () => {
+      // lat=90 and lng=180 are valid boundary values
+      const r1 = g.reverseGeocode(90, 0);
+      expect(r1).toBeDefined();
+      const r2 = g.reverseGeocode(0, 180);
+      expect(r2).toBeDefined();
+      const r3 = g.reverseGeocode(0, -180);
+      expect(r3).toBeDefined();
+    });
+  });
 });

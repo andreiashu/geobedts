@@ -51,20 +51,11 @@ describe('Scoring & Disambiguation', () => {
       expect(result.population).toBeGreaterThan(500_000);
     });
 
-    it('Portland → documents current behavior (may not be OR)', () => {
-      // BUG: Portland currently returns Portland, AU (pop 2326) instead of Portland, OR (pop 652503)
-      // This test documents the current behavior as a regression test
+    it('Portland → US (highest-population Portland)', () => {
       const result = g.geocode('Portland');
       expect(result.city).toBe('Portland');
-      // When this bug is fixed, change to: expect(GeoBed.cityCountry(result)).toBe('US');
-      // and expect(result.population).toBeGreaterThan(500_000);
-      const country = GeoBed.cityCountry(result);
-      if (country !== 'US') {
-        // Document the bug: Portland AU is returned instead of Portland OR
-        expect(country).toBe('AU'); // current buggy behavior
-      } else {
-        expect(result.population).toBeGreaterThan(500_000);
-      }
+      expect(GeoBed.cityCountry(result)).toBe('US');
+      expect(result.population).toBeGreaterThan(500_000);
     });
 
     it('Richmond → US (highest-population Richmond)', () => {
@@ -264,6 +255,45 @@ describe('Scoring & Disambiguation', () => {
       // This is tested indirectly: major cities should always win over tiny ones
       const result = g.geocode('London');
       expect(result.population).toBeGreaterThan(1000);
+    });
+  });
+
+  // ──────────────────────────────────────────────
+  // Full US state name recognition
+  // ──────────────────────────────────────────────
+
+  describe('Full US state name recognition', () => {
+    it('Springfield, Illinois → Springfield, IL, US', () => {
+      const result = g.geocode('Springfield, Illinois');
+      expect(result.city).toBe('Springfield');
+      expect(GeoBed.cityRegion(result)).toBe('IL');
+      expect(GeoBed.cityCountry(result)).toBe('US');
+    });
+
+    it('Springfield Illinois → Springfield, IL, US', () => {
+      const result = g.geocode('Springfield Illinois');
+      expect(result.city).toBe('Springfield');
+      expect(GeoBed.cityRegion(result)).toBe('IL');
+      expect(GeoBed.cityCountry(result)).toBe('US');
+    });
+
+    it('California, Los Angeles → Los Angeles, CA, US', () => {
+      const result = g.geocode('California, Los Angeles');
+      expect(result.city).toBe('Los Angeles');
+      expect(GeoBed.cityRegion(result)).toBe('CA');
+      expect(GeoBed.cityCountry(result)).toBe('US');
+    });
+  });
+
+  // ──────────────────────────────────────────────
+  // Country prefix matching order
+  // ──────────────────────────────────────────────
+
+  describe('Country prefix matching order', () => {
+    it('Bissau, Guinea-Bissau → GW (not Guinea)', () => {
+      const result = g.geocode('Bissau, Guinea-Bissau');
+      expect(result.city).toBe('Bissau');
+      expect(GeoBed.cityCountry(result)).toBe('GW');
     });
   });
 });

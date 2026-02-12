@@ -2,6 +2,7 @@ import { initLookupTables } from './string-interner.js';
 import { loadGeonamesCities, loadGeonamesCountryInfo } from './data-loader.js';
 import { storeCache } from './cache.js';
 import { compareCaseInsensitive } from './utils.js';
+import { buildNameIndex } from './name-index.js';
 
 async function main() {
   console.log('Initializing lookup tables...');
@@ -19,33 +20,7 @@ async function main() {
   cities.sort((a, b) => compareCaseInsensitive(a.city, b.city));
 
   console.log('Building name index...');
-  const nameIndex = new Map<string, number[]>();
-  for (let i = 0; i < cities.length; i++) {
-    const city = cities[i];
-    if (city.city.length > 0) {
-      const key = city.city.toLowerCase();
-      const existing = nameIndex.get(key);
-      if (existing) {
-        existing.push(i);
-      } else {
-        nameIndex.set(key, [i]);
-      }
-    }
-    if (city.cityAlt.length > 0) {
-      const alts = city.cityAlt.split(',');
-      for (const alt of alts) {
-        const trimmed = alt.trim();
-        if (trimmed.length === 0) continue;
-        const key = trimmed.toLowerCase();
-        const existing = nameIndex.get(key);
-        if (existing) {
-          existing.push(i);
-        } else {
-          nameIndex.set(key, [i]);
-        }
-      }
-    }
-  }
+  const nameIndex = buildNameIndex(cities);
 
   console.log('Storing cache...');
   storeCache('./geobed-cache', cities, countries, nameIndex);
